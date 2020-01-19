@@ -46,11 +46,8 @@ void initDrive(char *driveName){
 	fclose(f);
 }
 int removeDrive(char *driveName){
-	FILE *f = fopen(driveName, "wb");
-	if(f){
-		fclose(f);
+	if(remove(driveName) == 0)
 		return 0;
-	}
 	return 1;
 }
 int openDrive(char *driveName){
@@ -74,7 +71,7 @@ int openDrive(char *driveName){
 }
 int addToDir(char *driveName, char *name, unsigned int fileSize, unsigned int clusterNumber){
 	unsigned int length, entriesAvailable = 0;
-	unsigned int entriesNeeded = 0, clusterOfCurrentDir = 0;
+	unsigned int entriesNeeded = 1, clusterOfCurrentDir = 0;
 	unsigned int clustersNeeded = fileSize == 0 ? 0 : (fileSize - 1) / CLUSTER_SIZE + 1;
 	unsigned int i = 0, toWrite, next, end = CLUSTER_END, flag = 0;
 	unsigned char entryState = 0;
@@ -310,9 +307,9 @@ int deleteFile(char *driveName, char *name){
 	}
 }
 void printDrive(char *driveName, int ifShowAll){
-	int j = 0;
+	int j = 0, offset = 0;
 	unsigned int dirClusterNumber = 0, fileSize, fileBegin, newFile = 1;
-	unsigned int offset = 0, i = 0, next;
+	unsigned int i = 0, next;
 	char fileName[MAX_FILE_NAME], dirEntry[DIR_ENTRY_SIZE];
 	FILE *f = fopen(driveName, "rb");
 	printf("Name");
@@ -327,8 +324,9 @@ void printDrive(char *driveName, int ifShowAll){
 			if((unsigned char)dirEntry[0] == DIR_FREE){
 				if(newFile == 0){
 					if(ifShowAll || fileName[0] != '.'){
-						printf("%s", fileName);
-						for(; j < 64 - strlen(fileName); ++j)
+						for(j = 0; j < offset; ++j)
+							printf("%c", fileName[j]);
+						for(j = 0; j < 64 - offset; ++j)
 							printf(" ");
 						printf("%d\t0x%x\n", fileSize, firstClusterAddress + CLUSTER_SIZE * fileBegin);
 					}
@@ -338,22 +336,32 @@ void printDrive(char *driveName, int ifShowAll){
 			}
 			else if((unsigned char)dirEntry[0] == DIR_FIRST){
 				if(newFile == 0 && (ifShowAll || fileName[0] != '.')){
-					printf("%s", fileName);
-					for(; j < 64 - strlen(fileName); ++j)
+					for(j = 0; j < offset; ++j)
+						printf("%c", fileName[j]);
+					for(j = 0; j < 64 - offset; ++j)
 						printf(" ");
 					printf("%d\t0x%x\n", fileSize, firstClusterAddress + CLUSTER_SIZE * fileBegin);
 				}
 				fseek(f, -DIR_ENTRY_SIZE + 1, SEEK_CUR);
 				fread(&fileSize, 4, 1, f);
 				fread(&fileBegin, FAT_ENTRY_SIZE, 1, f);
-				strncpy(fileName, dirEntry + FILE_NAME_OFFSET_FIRST, MAX_FILE_NAME_FIRST);
-				offset += MAX_FILE_NAME_FIRST;
+				offset = 0;
+				for(j = 0; j < MAX_FILE_NAME_FIRST; ++j){
+					fileName[j] = dirEntry[FILE_NAME_OFFSET_FIRST + j];
+					if(fileName[j] == '\0')
+						break;
+				}
+				offset += j;
 				newFile = 0;
 				fseek(f, MAX_FILE_NAME_FIRST, SEEK_CUR);
 			}
 			else{
-				strncpy(fileName + offset, dirEntry + 1, MAX_FILE_NAME_CONT);
-				offset += MAX_FILE_NAME_CONT;
+				for(j = 0; j < MAX_FILE_NAME_CONT; ++j){
+					fileName[offset + j] = dirEntry[j + 1];
+					if(fileName[offset + j] == '\0')
+						break;
+				}
+				offset += j;
 			}
 		}
 		fseek(f, dirClusterNumber * FAT_ENTRY_SIZE, SEEK_SET);
@@ -366,13 +374,14 @@ void printDrive(char *driveName, int ifShowAll){
 	}
 }
 void printMap(char *driveName){
-	unsigned int lastDir = 0, i = 0, address = firstClusterAddress + i * CLUSTER_SIZE;
+	unsigned int lastDir = 0, i = 0, address;
 	unsigned int state;
 	char type[5];
 	FILE *f = fopen(driveName, "rb");
 	printf("Number\tAddress\tType\tState\n");
 	printf("------\t0x0\tFAT\t-----\n");
 	for(; i < clustersAmount; ++i){
+		address = firstClusterAddress + i * CLUSTER_SIZE;
 		fread(&state, FAT_ENTRY_SIZE, 1, f);
 		if(i == lastDir){
 			strcpy(type, "DIR");
@@ -386,7 +395,7 @@ void printMap(char *driveName){
 		else if(state == CLUSTER_END)
 			printf("0x%x\t0x%x\t%s\tLAST\n", i, address, type);
 		else
-			printf("0x%x\t0x%x\t%x\t->0x%x\n", i, address, type, state);
+			printf("0x%x\t0x%x\t%s\t->0x%x\n", i, address, type, state);
 	}
 	fclose(f);
 }
