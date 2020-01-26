@@ -96,7 +96,7 @@ int addToDir(char *driveName, char *name, unsigned int fileSize, unsigned int cl
 			fseek(f, DIR_ENTRY_SIZE - 1, SEEK_CUR);
 		}
 		if(entriesAvailable == entriesNeeded){
-			fseek(f, -1 - DIR_ENTRY_SIZE * (entriesNeeded - 1), SEEK_CUR);
+			fseek(f, -1 - DIR_ENTRY_SIZE * ((int)entriesNeeded - 1), SEEK_CUR);
 			entryState = DIR_FIRST;
 			fwrite(&entryState, 1, 1, f);
 			fwrite(&fileSize, 4, 1, f);
